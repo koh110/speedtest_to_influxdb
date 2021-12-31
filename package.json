@@ -1,11 +1,15 @@
 {
   "private": true,
   "scripts": {
-    "start": "export $(cat .env | xargs) && node index.js"
+    "start": "export $(cat .env | xargs) && node index.js",
+    "format": "prettier --write *.js"
   },
   "dependencies": {
-    "@influxdata/influxdb-client": "^1.13.0",
-    "puppeteer": "^9.0.0",
-    "yargs": "^17.0.0"
+    "@influxdata/influxdb-client": "^1.21.0",
+    "puppeteer": "^13.0.1",
+    "yargs": "^17.3.1"
+  },
+  "devDependencies": {
+    "prettier": "^2.5.1"
   }
 }

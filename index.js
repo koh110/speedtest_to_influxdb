@@ -3,18 +3,26 @@ const { hideBin } = require('yargs/helpers')
 const puppeteer = require('puppeteer')
 const { InfluxDB, Point } = require('@influxdata/influxdb-client')
 
-const INFLUXDB_URL = process.env.INFLUXDB_URL
-const INFLUXDB_TOKEN = process.env.INFLUXDB_TOKEN
-const INFLUXDB_ORG = process.env.INFLUXDB_ORG
-const INFLUXDB_BUCKET = process.env.INFLUXDB_BUCKET
+const { headless, test } = yargs(hideBin(process.argv))
+  .option('headless', {
+    type: 'boolean',
+    default: true
+  })
+  .option('test', {
+    type: 'boolean',
+    default: false
+  }).argv
 
-const influxDB = new InfluxDB({ url: INFLUXDB_URL, token: INFLUXDB_TOKEN })
-const writeApi = influxDB.getWriteApi(INFLUXDB_ORG, INFLUXDB_BUCKET)
+let writeApi = null
+if (!test) {
+  const INFLUXDB_URL = process.env.INFLUXDB_URL
+  const INFLUXDB_TOKEN = process.env.INFLUXDB_TOKEN
+  const INFLUXDB_ORG = process.env.INFLUXDB_ORG
+  const INFLUXDB_BUCKET = process.env.INFLUXDB_BUCKET
 
-const { headless } = yargs(hideBin(process.argv)).option('headless', {
-  type: 'boolean',
-  default: true
-}).argv
+  const influxDB = new InfluxDB({ url: INFLUXDB_URL, token: INFLUXDB_TOKEN })
+  writeApi = influxDB.getWriteApi(INFLUXDB_ORG, INFLUXDB_BUCKET)
+}
 
 const getValues = async (page) => {
   const result = await page.evaluate(() => {
@@ -24,11 +32,11 @@ const getValues = async (page) => {
       latency: document.querySelector('#latency-value').textContent,
       latencyUnit: document.querySelector('#latency-units').textContent,
       upload: document.querySelector('#upload-value').textContent,
-      uploadUnit: document.querySelector('#upload-units').textContent.trim(),
+      uploadUnit: document.querySelector('#upload-units').textContent.trim()
     }
   })
 
-  return result;
+  return result
 }
 
 const main = async () => {
@@ -41,26 +49,28 @@ const main = async () => {
 
   try {
     const page = await browser.newPage()
-    await page.goto('https://fast.com/ja/', { waitUntil: 'networkidle2' })
+    await page.goto('https://fast.com/ja/', { waitUntil: 'domcontentloaded', timeout: 0 })
 
     await page.waitForSelector('#speed-progress-indicator.succeeded')
 
-    await page.click('#show-more-details-link');
-    await page.waitForSelector('#speed-progress-indicator.succeeded')
+    await page.click('#show-more-details-link')
+    await page.waitForSelector('#speed-progress-indicator.succeeded', { timeout: 60000 })
 
     const result = await getValues(page)
-    console.log(result)
+    console.log('speedtest:', result)
 
     const point = new Point('speedtest')
       .floatField('download', result.download)
       .floatField('latency', result.latency)
       .floatField('upload', result.upload)
 
-    writeApi.writePoint(point)
-  
-    await writeApi.close()
+    if (!test) {
+      writeApi.writePoint(point)
+      await writeApi.close()
+      console.log('write data!')
+    }
   } catch (e) {
-    console.log('error: ', e)
+    console.log('error:', e)
   } finally {
     browser.close()
   }
